@@ -1,0 +1,51 @@
+
+// quote
+{
+  "inputMint": "So11111111111111111111111111111111111111112",
+  "inAmount": "100000000",
+  "outputMint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+  "outAmount": "16295914",
+  "otherAmountThreshold": "16214435",
+  "swapMode": "ExactIn",
+  "slippageBps": 50,
+  "platformFee": null,
+  "priceImpactPct": "0",
+  "routePlan": [
+    {
+      "swapInfo": {
+        "ammKey": "AhhoxZDmsg2snm85vPjqzYzEYESoKfb4KmTj4HrBBNwY",
+        "label": "Whirlpool",
+        "inputMint": "So11111111111111111111111111111111111111112",
+        "outputMint": "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
+        "inAmount": "100000000",
+        "outAmount": "16305598",
+        "feeAmount": "100",
+        "feeMint": "So11111111111111111111111111111111111111112"
+      },
+      "percent": 100
+    },
+    {
+      "swapInfo": {
+        "ammKey": "YAkoNb6HKmSxQN9L8hiBE5tPJRsniSSMzND1boHmZxe",
+        "label": "Saber",
+        "inputMint": "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
+        "outputMint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+        "inAmount": "16305598",
+        "outAmount": "16295914",
+        "feeAmount": "1629",
+        "feeMint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+      },
+      "percent": 100
+    }
+  ],
+  "contextSlot": 270526719,
+  "timeTaken": 0.018501199
+}
+
+
+// swap
+{
+  swapTransaction: 'AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAAQAHCuYS3zKIEcKUzn92xBcXNyiOPtc3U78f3k1flptbx8CdSHxAEChV0RPv+S4gujAWlUbu8NkMhxt4Q+YRWZgTxSNn6KRAIcW+kUUB0e+YTlcxuq/zTVal50xr0k0J0UmATgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAwZGb+UhFzL/7K26csOb57yM5bvF9xJrLEObOkAAAAAEedVb8jHAbu50xW7OaBUH/bGy3qP0jlECsc2iVrwTjwbd9uHXZaGT2cvhRs7reawctIXtX1s3kTqM9YV+/wCpjJclj04kifG7PRApFI4NgwtaE5na/xCEBI572Nvp+Fm0P/on9df2SnTAmx8pWHneSwmrNt/J3VFLMhqns4zl6Mb6evO+2606PWXzaqvJdDGxu+TC0vbg5HymAgNFL11hkgQea7NGMM0HLyDD/cICelll0Nb2Bu5Ow3ItuqECMqYHBAAFAsBcFQAEAAkDKmgAAAAAAAAHBgACAA4DBgEBAwIAAgwCAAAAAOH1BQAAAAAGAQIBEQUVBgACAQUJBQgFEA8KDQECCwwAEQYFJOUXy5d6460qAQAAABIAZAABAOH1BQAAAADyf/gAAAAAADIAAAYDAgAAAQkBWLc/pm0ftKBWJhATbryEx3KVQqjXksub0q0b91ww1aQEvcLBugSXvLu/',
+  lastValidBlockHeight: 250183844,
+  prioritizationFeeLamports: 37332
+}
