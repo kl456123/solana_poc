@@ -14,8 +14,8 @@ SOLANA_RPC_ENDPOINT=https://xxx
 
 ```
 # send some swap txs using jupiter api
-yarn test
+yarn run test
 
 # then check these tx status and calc failure rate
-yarn check
+yarn run check
 ```
