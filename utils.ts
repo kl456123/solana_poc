@@ -4,26 +4,42 @@ import fs from "fs";
 export const DEFAULT_LOG_FILE = "./data/swap.log";
 
 export async function checkTxIds(connection: Connection, txIds: string[]) {
+  const totalCounts = txIds.length;
+  let successCounts = 0;
+  let onChainCounts = 0;
   for (const txId of txIds) {
     const result = await connection.getSignatureStatus(txId, {
       searchTransactionHistory: true,
     });
     if (result.value?.confirmationStatus !== undefined) {
-      console.log(`tx: ${txId} is sent successfully`);
+      onChainCounts += 1;
+      console.log(
+        `tx[${result.value?.confirmationStatus}] : ${txId} is sent successfully`,
+      );
+      if (result.value.err !== null) {
+        // {"InstructionError":[5,{"Custom":6001}]} Slippage tolerance exceeded
+        // {"InstructionError":[5,{"Custom":6003}]} Stale oracle price
+        console.log(`err: ${JSON.stringify(result.value.err)}`);
+      } else {
+        successCounts += 1;
+      }
     } else {
-      console.log(`tx: ${txId} is fail to send`);
+      console.log(`tx: ${txId} is failed to send`);
     }
   }
+  console.log(`fail rate: ${(totalCounts - successCounts) / totalCounts}`);
+  console.log(`lost rate: ${(totalCounts - onChainCounts) / totalCounts}`);
 }
 
 export function saveTxIdsToFile(
   txIds: string[],
+  overwrite = false,
   logFile: string = DEFAULT_LOG_FILE,
 ) {
   // load from file
   let savedTxIds: string[] = [];
-  if (fs.existsSync(logFile)) {
-    savedTxIds = JSON.parse(fs.readFileSync(logFile, "utf-8"));
+  if (!overwrite && fs.existsSync(logFile)) {
+    savedTxIds.push(...JSON.parse(fs.readFileSync(logFile, "utf-8")));
   }
   savedTxIds.push(...txIds);
   // save back
