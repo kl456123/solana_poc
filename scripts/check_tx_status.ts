@@ -3,7 +3,7 @@ import * as bs58 from "bs58";
 
 import * as web3 from "@solana/web3.js";
 import { Connection } from "@solana/web3.js";
-import { checkTxIds, loadTxIdsFromFile } from "./utils";
+import { checkTxIds, loadTxIdsFromFile } from "../src/utils";
 import dotenv from "dotenv";
 dotenv.config();
 

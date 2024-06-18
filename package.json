@@ -21,6 +21,8 @@
     "typescript": "^5.4.5"
   },
   "scripts": {
-    "prettier": "prettier . --write"
+    "prettier": "prettier . --write",
+    "test": "ts-node scripts/api_demo.ts",
+    "check": "ts-node scripts/check_tx_status.ts"
   }
 }

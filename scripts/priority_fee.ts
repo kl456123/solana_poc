@@ -14,7 +14,7 @@ import fetch from "cross-fetch";
 import { Wallet } from "@project-serum/anchor";
 import * as bs58 from "bs58";
 import axios from "axios";
-import { checkTxIds, saveTxIdsToFile } from "./utils";
+import { checkTxIds, saveTxIdsToFile } from "../src/utils";
 
 import dotenv from "dotenv";
 dotenv.config();
