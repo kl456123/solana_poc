@@ -61,7 +61,16 @@ async function getQuote(params?: {}): Promise<{}> {
       const response = await axios.request(config);
       return response.data;
     },
-    { retries: 3 },
+    {
+      retries: 3,
+      onRetry: (err, retry) => {
+        // reset pools
+        console.log(
+          err.message,
+          `Failed request for quote. Retry attempt: ${retry}`,
+        );
+      },
+    },
   );
 }
 
@@ -244,7 +253,16 @@ async function getTransaction(
       const tx = new Transaction();
       return VersionedTransaction.deserialize(swapTransactionBuf);
     },
-    { retries: 3 },
+    {
+      retries: 3,
+      onRetry: (err, retry) => {
+        // reset pools
+        console.log(
+          err.message,
+          `Failed request for swap. Retry attempt: ${retry}`,
+        );
+      },
+    },
   );
 }
 
@@ -329,7 +347,7 @@ async function main() {
         onRetry: (err, retry) => {
           // reset pools
           console.log(
-            { err },
+            err.message,
             `Failed to send transaction. Retry attempt: ${retry}`,
           );
         },
