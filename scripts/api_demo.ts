@@ -89,12 +89,16 @@ async function estimateUnitLimit(
 }
 
 function decodePriorityFee(message: TransactionMessage) {
-  let unitLimit, unitPrice;
+  let unitLimit = undefined,
+    unitPrice = undefined;
   for (const instruction of message.instructions) {
     if (instruction.programId.equals(ComputeBudgetProgram.programId)) {
       const discriminator = instruction.data[0];
       switch (discriminator) {
         case 2: {
+          if (unitLimit !== undefined) {
+            throw new Error(`duplicated compute unit limit ix`);
+          }
           unitLimit = borsh.deserialize(
             { struct: { discriminator: "u8", units: "u32" } },
             Buffer.from(instruction.data),
@@ -102,6 +106,9 @@ function decodePriorityFee(message: TransactionMessage) {
           break;
         }
         case 3: {
+          if (unitPrice !== undefined) {
+            throw new Error(`duplicated compute unit price ix`);
+          }
           unitPrice = borsh.deserialize(
             { struct: { discriminator: "u8", microLamports: "u64" } },
             Buffer.from(instruction.data),
@@ -322,7 +329,7 @@ async function main() {
   //////////// quote /////////
   // swapping SOL to USDC with input 0.1 SOL and 0.5% slippage
   const txIds: string[] = [];
-  const numTxs = 100;
+  const numTxs = 10;
   for (let i = 0; i < numTxs; ) {
     const quoteRequestParams: any = {
       inputMint: "So11111111111111111111111111111111111111112",
