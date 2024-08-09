@@ -1,5 +1,6 @@
 import { Connection, Keypair, VersionedTransaction } from "@solana/web3.js";
 import fs from "fs";
+import axios from "axios";
 
 export const DEFAULT_LOG_FILE = "./data/swap.log";
 
@@ -27,6 +28,7 @@ export async function checkTxIds(connection: Connection, txIds: string[]) {
       console.log(`tx: ${txId} is failed to send`);
     }
   }
+  console.log(`total num of tx: ${txIds.length}`);
   console.log(`fail rate: ${(totalCounts - successCounts) / totalCounts}`);
   console.log(`lost rate: ${(totalCounts - onChainCounts) / totalCounts}`);
 }
@@ -49,4 +51,19 @@ export function saveTxIdsToFile(
 export function loadTxIdsFromFile(path: string = DEFAULT_LOG_FILE) {
   const txIds = JSON.parse(fs.readFileSync(path, "utf-8"));
   return txIds;
+}
+
+export async function getBundleStatus(bundleId: string) {
+  const url = "https://mainnet.block-engine.jito.wtf/api/v1/bundles";
+  const method = "getBundleStatuses";
+  const request = {
+    jsonrpc: "2.0",
+    id: 1,
+    method,
+    params: [[bundleId]],
+  };
+  const { data } = await axios.post(url, JSON.stringify(request), {
+    headers: { "Content-Type": "application/json" },
+  });
+  return data;
 }

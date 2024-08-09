@@ -8,6 +8,7 @@ import {
   TransactionMessage,
   ComputeBudgetProgram,
   AddressLookupTableAccount,
+  SystemProgram,
 } from "@solana/web3.js";
 import * as borsh from "borsh";
 import fetch from "cross-fetch";
@@ -15,6 +16,7 @@ import { Wallet } from "@project-serum/anchor";
 import * as bs58 from "bs58";
 import axios from "axios";
 import { checkTxIds, saveTxIdsToFile } from "../src/utils";
+import { jitoBaseUrl } from "../src/constants";
 import dotenv from "dotenv";
 dotenv.config();
 
@@ -24,6 +26,7 @@ const minPriorityFee = 100000000000;
 const maxPriorityFee = 100000000000;
 const estimateByApi = false;
 const jupiter_api_url = "quote-api.jup.ag/v6";
+const useJito = true;
 
 async function retriveRoutedMap() {
   const indexedRouteMap = await (
@@ -131,31 +134,15 @@ async function printPriorityFee(
   transaction: VersionedTransaction,
   connection: Connection,
 ) {
-  const addressLookupTableAccounts = await Promise.all(
-    transaction.message.addressTableLookups.map(async (lookup) => {
-      return new AddressLookupTableAccount({
-        key: lookup.accountKey,
-        state: AddressLookupTableAccount.deserialize(
-          await connection
-            .getAccountInfo(lookup.accountKey)
-            .then((res) => res!.data),
-        ),
-      });
-    }),
-  );
+  const addressLookupTableAccounts = await parseLUT(transaction, connection);
   const message = TransactionMessage.decompile(transaction.message, {
-    addressLookupTableAccounts: addressLookupTableAccounts,
+    addressLookupTableAccounts,
   });
 
   console.log("priorityFee: ", decodePriorityFee(message));
 }
 
-// adjust message in version transaction
-async function setPriorityFee(
-  params: {
-    unitPrice?: number;
-    unitLimit?: number;
-  },
+async function parseLUT(
   transaction: VersionedTransaction,
   connection: Connection,
 ) {
@@ -172,6 +159,33 @@ async function setPriorityFee(
       });
     }),
   );
+  return addressLookupTableAccounts;
+}
+
+async function clearPriorityFee(
+  transaction: VersionedTransaction,
+  connection: Connection,
+) {
+  const addressLookupTableAccounts = await parseLUT(transaction, connection);
+  const message = TransactionMessage.decompile(transaction.message, {
+    addressLookupTableAccounts,
+  });
+  message.instructions = message.instructions.filter(
+    (ix) => !ix.programId.equals(ComputeBudgetProgram.programId),
+  );
+  transaction.message = message.compileToV0Message(addressLookupTableAccounts);
+}
+
+// adjust message in version transaction
+async function setPriorityFee(
+  params: {
+    unitPrice?: number;
+    unitLimit?: number;
+  },
+  transaction: VersionedTransaction,
+  connection: Connection,
+) {
+  const addressLookupTableAccounts = await parseLUT(transaction, connection);
   const message = TransactionMessage.decompile(transaction.message, {
     addressLookupTableAccounts: addressLookupTableAccounts,
   });
@@ -244,17 +258,12 @@ async function getTransaction(
     // auto wrap and unwrap SOL. default is true
     wrapUnwrapSOL: true,
     ...options,
-    // prioritizationFeeLamports: "auto",
-    // prioritizationFeeLamports: {
-    //   autoMultiplier: 2,
-    // },
-    // dynamicComputeUnitLimit: true,
     // feeAccount is optional. Use if you want to charge a fee.  feeBps must have been passed in /quote API.
     // This is the ATA account for the output token where the fee will be sent to. If you are swapping from SOL->USDC then this would be the USDC ATA you want to collect the fee.
     // feeAccount: "fee_account_public_key"
   });
 
-  let config = {
+  const config = {
     method: "post",
     maxBodyLength: Infinity,
     url: `https://${jupiter_api_url}/swap`,
@@ -272,7 +281,6 @@ async function getTransaction(
 
       // deserialize the transaction
       const swapTransactionBuf = Buffer.from(swapTransaction, "base64");
-      const tx = new Transaction();
       return VersionedTransaction.deserialize(swapTransactionBuf);
     },
     {
@@ -288,11 +296,98 @@ async function getTransaction(
   );
 }
 
+async function sendTransactionByApi(rawTransaction: Uint8Array) {
+  const baseUrl = "http://10.100.112.186:9305/";
+  const config = {
+    method: "post",
+    maxBodyLength: Infinity,
+    url: `${baseUrl}/v1/private/wallet-direct/buw/wallet/networks/onchain/send-transacton`,
+    data: {
+      binanceChainId: "CT_501",
+      signedTransaction: Buffer.from(rawTransaction).toString("base64"),
+    },
+    headers: {
+      "x-gray-env": "w3w-2416",
+      "x-trace-id": "003753b777384c63846f50174347e0fd",
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+  };
+  const result = await axios.request(config);
+  const txid = result.data.data.txId;
+  return txid;
+}
+
+async function sendTransactionByJito(
+  feePayer: Keypair,
+  rawTransaction: Uint8Array,
+  recentBlockhash: string,
+  useBundle = true,
+  tipLamports = 1_000,
+) {
+  const baseUrl = jitoBaseUrl;
+  if (useBundle) {
+    const tipAccount = new PublicKey(
+      "Cw8CFyM9FkoMi7K7Crf6HNQqf4uEMzpKw6QNghXLvLkY",
+    );
+    const tipIx = SystemProgram.transfer({
+      fromPubkey: feePayer.publicKey,
+      toPubkey: tipAccount,
+      lamports: tipLamports,
+    });
+
+    const instructions = [tipIx];
+
+    const messageV0 = new TransactionMessage({
+      payerKey: feePayer.publicKey,
+      recentBlockhash,
+      instructions,
+    }).compileToV0Message();
+
+    const tipTx = new VersionedTransaction(messageV0);
+
+    tipTx.sign([feePayer]);
+    const request = {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "sendBundle",
+      params: [[bs58.encode(rawTransaction), bs58.encode(tipTx.serialize())]],
+    };
+    const { data } = await axios.post(
+      `${baseUrl}/bundles`,
+      JSON.stringify(request),
+      {
+        headers: { "Content-Type": "application/json" },
+      },
+    );
+    return data;
+  } else {
+    const request = {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "sendTransaction",
+      params: [bs58.encode(rawTransaction)],
+    };
+    const { data } = await axios.post(
+      `${baseUrl}/transactions`,
+      JSON.stringify(request),
+      {
+        headers: { "Content-Type": "application/json" },
+        params: {
+          bundleOnly: true,
+        },
+      },
+    );
+    return data;
+  }
+}
+
 async function sendTransaction(
   connection: Connection,
   transaction: VersionedTransaction,
   signers: Keypair[],
   updateBlockHash = true,
+  useJito = false,
 ) {
   if (updateBlockHash) {
     const { blockhash, lastValidBlockHeight } =
@@ -300,17 +395,25 @@ async function sendTransaction(
     transaction.message.recentBlockhash = blockhash;
   }
   // sign the transaction
-  // await new Promise(resolve => setTimeout(resolve, 4000));
   transaction.sign(signers);
 
   // Execute the transaction
   const rawTransaction = transaction.serialize();
-  const txid = await connection.sendRawTransaction(rawTransaction, {
-    skipPreflight: true,
-    maxRetries: 10,
-  });
-  // await connection.confirmTransaction(txid);
-  // console.log(`https://solscan.io/tx/${txid}`);
+  // calc txid instead of returned value from rpc call
+  const txid = bs58.encode(transaction.signatures[0]);
+  if (useJito) {
+    await sendTransactionByJito(
+      signers[0],
+      rawTransaction,
+      transaction.message.recentBlockhash,
+      false,
+    );
+  } else {
+    await connection.sendRawTransaction(rawTransaction, {
+      skipPreflight: true,
+      maxRetries: 10,
+    });
+  }
   return txid;
 }
 
@@ -329,71 +432,83 @@ async function main() {
   //////////// quote /////////
   // swapping SOL to USDC with input 0.1 SOL and 0.5% slippage
   const txIds: string[] = [];
-  const numTxs = 10;
-  for (let i = 0; i < numTxs; ) {
-    const quoteRequestParams: any = {
-      inputMint: "So11111111111111111111111111111111111111112",
-      outputMint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
-      amount: 10000000,
-      restrictIntermediateTokens: true,
-    };
-    if (estimateByApi) {
-      quoteRequestParams.autoSlippage = true;
-    } else {
-      quoteRequestParams.slippageBps = 100;
-    }
-    const route = await getQuote(quoteRequestParams);
+  const numTxs = 1;
+  for (let i = 0; i < numTxs; ++i) {
+    // skip any failure cases after retry multiple times
+    try {
+      const quoteRequestParams: any = {
+        inputMint: "So11111111111111111111111111111111111111112",
+        outputMint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+        amount: 10000000,
+        restrictIntermediateTokens: true,
+      };
+      if (estimateByApi) {
+        quoteRequestParams.autoSlippage = true;
+      } else {
+        quoteRequestParams.slippageBps = 100;
+      }
+      const route = await getQuote(quoteRequestParams);
 
-    const option = estimateByApi
-      ? {
-          prioritizationFeeLamports: "auto",
-          dynamicComputeUnitLimit: true,
-        }
-      : {};
+      const option = estimateByApi
+        ? {
+            // prioritizationFeeLamports: "auto",
+            prioritizationFeeLamports: {
+              autoMultiplier: 2,
+            },
+            dynamicComputeUnitLimit: true,
+          }
+        : {};
 
-    //////////////   get transaction to swap onchain ////////////////
-    // get serialized transactions for the swap
-    const transaction = await getTransaction(
-      route,
-      wallet.publicKey.toString(),
-      option,
-    );
+      //////////////   get transaction to swap onchain ////////////////
+      // get serialized transactions for the swap
+      const transaction = await getTransaction(
+        route,
+        wallet.publicKey.toString(),
+        option,
+      );
 
-    // set already in tx returned from jupiter api
-    if (!estimateByApi) {
-      const unitPrice = 500000;
-      const unitLimit = undefined;
-      await setPriorityFee({ unitPrice, unitLimit }, transaction, connection);
-    } else {
-      await printPriorityFee(transaction, connection);
-    }
+      // set already in tx returned from jupiter api
+      // NOTE(when enable jito, priority fee is not necessary)
+      if (useJito) {
+        // clean all ixs of ComputeBudgetProgram
+        await clearPriorityFee(transaction, connection);
+      } else if (!estimateByApi) {
+        const unitPrice = 50_000;
+        const unitLimit = undefined;
+        await setPriorityFee({ unitPrice, unitLimit }, transaction, connection);
+      } else {
+        await printPriorityFee(transaction, connection);
+      }
 
-    await retry(
-      async () => {
-        const txId = await sendTransaction(connection, transaction, [
-          wallet.payer,
-        ]);
-        console.log(`send tx with txId: ${txId}`);
-        txIds.push(txId);
-        ++i;
-      },
-      {
-        retries: 3,
-        onRetry: (err, retry) => {
-          // reset pools
-          console.log(
-            err.message,
-            `Failed to send transaction. Retry attempt: ${retry}`,
+      await retry(
+        async () => {
+          const txId = await sendTransaction(
+            connection,
+            transaction,
+            [wallet.payer],
+            true,
+            useJito,
           );
+          console.log(`send tx with txId: ${txId}`);
+          txIds.push(txId);
         },
-      },
-    );
+        {
+          retries: 3,
+          onRetry: (err, retry) => {
+            // reset pools
+            console.log(
+              err.message,
+              `Failed to send transaction. Retry attempt: ${retry}`,
+            );
+          },
+        },
+      );
+    } catch (e) {
+      console.log(`skip failure case due to error: ${e}`);
+    }
   }
 
-  // TODO(save txIds to log file)
   saveTxIdsToFile(txIds, true);
-  // await new Promise(f => setTimeout(f, 1000));
-  // await checkTxIds(connection, txIds)
 }
 
 main();
